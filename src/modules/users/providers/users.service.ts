@@ -51,21 +51,23 @@ export class UsersService {
 
     user.role = role;
 
-    return this.usersRepository.save(user);
-  }
-  async findAllWithRoles(): Promise<User[]> {
-    const cachedObj = await this.redisService.getObj(REDIS_INDEX_USERS);
-    if (cachedObj) return cachedObj;
-    return await this.reIndexUsersIntoRedis();
+    const updatedUser = await this.usersRepository.save(user);
+    await this.reIndexUsersIntoRedis()
+    return updatedUser
   }
   async findWithRoleAndPermission() {
-    return await this.usersRepository.find({
+    let users = await this.redisService.getObj(REDIS_INDEX_USERS)
+    if (!users){
+      users =  await this.usersRepository.find({
       relations: {
         role: {
           permissions: true,
         },
       },
     });
+    await this.reIndexUsersIntoRedis()
+    }
+    return users
   }
 
   async findOneWithRoleAndPermission(id: string) {
@@ -87,6 +89,5 @@ export class UsersService {
       .leftJoinAndSelect("user.role", "role")
       .getMany();
     await this.redisService.setObj(REDIS_INDEX_USERS, usersWithRoles);
-    return usersWithRoles;
   }
 }

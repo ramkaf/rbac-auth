@@ -35,8 +35,10 @@ export class RoleService {
       return existingRole;
     }
 
-    const role = this.roleRepository.create(dto);
-    return this.roleRepository.save(role);
+    const roleSchema = this.roleRepository.create(dto);
+    const role = await this.roleRepository.save(roleSchema);
+    await this.reIndexAllRoleAndPermissionsIntoRedis()
+    return role;
   }
 
   async assignPermissionsToRole(
@@ -59,10 +61,15 @@ export class RoleService {
   }
 
   async findAllWithPermissions(): Promise<Role[]> {
-    return await this.roleRepository
+    let roleWithPermissions = await this.redisService.getObj(REDIS_INDEX_ROLE)
+    if (!roleWithPermissions){
+     roleWithPermissions =  await this.roleRepository
       .createQueryBuilder("role")
       .leftJoinAndSelect("role.permissions", "permission")
       .getMany();
+      await this.reIndexAllRoleAndPermissionsIntoRedis()
+    }
+    return roleWithPermissions
   }
 
   async findOne(id: string): Promise<Role | null> {
@@ -95,6 +102,7 @@ export class RoleService {
     await this.redisService.del(REDIS_INDEX_ROLE);
     await this.redisService.set(REDIS_INDEX_ROLE, JSON.stringify(users));
   }
+
   async findByTitle(title: string): Promise<Role> {
     return await this.roleRepository.findOne({
       where: {
