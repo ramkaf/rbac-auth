@@ -1,3 +1,3 @@
-export const REDIS_INDEX_ROLE = "redis-index-roles";
-export const REDIS_INDEX_USERS = "redis-index-users";
+export const REDIS_INDEX_USER_WITH_THEIR_PERMISSIONS =
+  "redis-index-user-with-their-permissions";
 export const REDIS_TTLSECOND = 86400;

@@ -1,21 +1,19 @@
 import { Role } from "@databases/postgresql/entities/role.entity";
-import { RedisService } from "@databases/redis/redis.service";
 import { UsersService } from "@modules/users/providers/users.service";
 import {
   BadRequestException,
   forwardRef,
   Inject,
   Injectable,
-  NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { PermissionService } from "./permission.service";
-import { REDIS_INDEX_ROLE } from "@databases/redis/redis.contants";
 import {
   AssignPermissionsToRoleDto,
   CreateRoleDto,
 } from "../dto/create-role.dto";
+import { IRole } from "../interfaces/rbac.interface";
 
 @Injectable()
 export class RoleService {
@@ -23,13 +21,13 @@ export class RoleService {
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
     private permissionService: PermissionService,
-    private readonly redisService: RedisService,
+    @Inject(forwardRef(() => UsersService))
+    private readonly userService: UsersService,
   ) {}
 
   async create(dto: CreateRoleDto): Promise<Role> {
-    const existingRole = await this.roleRepository.findOne({
-      where: { title: dto.title },
-    });
+    const { title } = dto;
+    const existingRole = await this.findByTitle(title);
 
     if (existingRole) {
       return existingRole;
@@ -37,10 +35,32 @@ export class RoleService {
 
     const roleSchema = this.roleRepository.create(dto);
     const role = await this.roleRepository.save(roleSchema);
-    await this.reIndexAllRoleAndPermissionsIntoRedis()
+    await this.userService.reIndexUsersWithPermissionsIntoRedis();
     return role;
   }
+  async findOne(id: string): Promise<Role | null> {
+    return await this.roleRepository.findOne({
+      where: { id },
+      relations: {
+        permissions: true,
+      },
+    });
+  }
+  async findByTitle(title: string): Promise<Role> {
+    return await this.roleRepository.findOne({
+      where: {
+        title,
+      },
+    });
+  }
 
+  async findAllWithPermissions(): Promise<IRole[]> {
+    return await this.roleRepository.find({
+      relations: {
+        permissions: true,
+      },
+    });
+  }
   async assignPermissionsToRole(
     assignPermissionsToRoleDto: AssignPermissionsToRoleDto,
   ): Promise<Role> {
@@ -52,62 +72,10 @@ export class RoleService {
     });
     if (!role) throw new BadRequestException("role not found");
     const permissions =
-      await this.permissionService.findByUuids(permissionUuids);
+      await this.permissionService.findByIds(permissionUuids);
     role.permissions = permissions;
-
     const assignedRole = await this.roleRepository.save(role);
-    await this.reIndexAllRoleAndPermissionsIntoRedis();
+    await this.userService.reIndexUsersWithPermissionsIntoRedis();
     return assignedRole;
-  }
-
-  async findAllWithPermissions(): Promise<Role[]> {
-    let roleWithPermissions = await this.redisService.getObj(REDIS_INDEX_ROLE)
-    if (!roleWithPermissions){
-     roleWithPermissions =  await this.roleRepository
-      .createQueryBuilder("role")
-      .leftJoinAndSelect("role.permissions", "permission")
-      .getMany();
-      await this.reIndexAllRoleAndPermissionsIntoRedis()
-    }
-    return roleWithPermissions
-  }
-
-  async findOne(id: string): Promise<Role | null> {
-    const role = await this.roleRepository.findOne({
-      where: { id },
-      relations: ["permissions"],
-    });
-    return role;
-  }
-
-  async ensureRoleExist(id: string) {
-    const role = await this.roleRepository.findOne({ where: { id } });
-    if (!role) throw new NotFoundException("role not found");
-    return role;
-  }
-
-  async findWithPermissions(id: string) {
-    return await this.roleRepository.findOne({
-      where: {
-        id,
-      },
-      relations: {
-        permissions: true,
-      },
-    });
-  }
-
-  async reIndexAllRoleAndPermissionsIntoRedis() {
-    const users = await this.findAllWithPermissions();
-    await this.redisService.del(REDIS_INDEX_ROLE);
-    await this.redisService.set(REDIS_INDEX_ROLE, JSON.stringify(users));
-  }
-
-  async findByTitle(title: string): Promise<Role> {
-    return await this.roleRepository.findOne({
-      where: {
-        title,
-      },
-    });
   }
 }

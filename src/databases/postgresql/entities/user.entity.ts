@@ -1,11 +1,9 @@
 import {
   Column,
-  CreateDateColumn,
   Entity,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  UpdateDateColumn,
 } from "typeorm";
 import { Role } from "./role.entity";
 
@@ -29,10 +27,4 @@ export class User {
   @ManyToOne(() => Role, (role) => role.users)
   @JoinColumn()
   role: Role;
-
-  @CreateDateColumn({ name: "created_at" })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: "updated_at" })
-  updatedAt: Date;
 }

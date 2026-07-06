@@ -1,16 +1,20 @@
 import { Controller, Post, Get, Patch } from "@nestjs/common";
-import { ControllerPermission, RequiresPermission } from "@modules/rbac/decorators/requires-permission.decorator";
+import {
+  RequiresPermission,
+} from "@modules/rbac/decorators/requires-permission.decorator";
 import { Public } from "@modules/rbac/decorators/public.decorator";
 import { ApiOperationWithDocs, Auth } from "document";
-import { sample_MANAGEMENT_CREATE_PERMISSION, sample_MANAGEMENT_PERMISSION } from "@modules/rbac/constants";
+import {
+  sample_MANAGEMENT_CREATE_PERMISSION,
+} from "@modules/rbac/constants";
 import { ApiTags } from "@nestjs/swagger";
 
 // Grants access to all endpoints in this controller
 // for users with the wildcard permission: "SAMPLE-management:*".
 @Auth()
-@ApiTags('sample')
+@ApiTags("sample")
 @Controller("sample")
-@ControllerPermission(sample_MANAGEMENT_PERMISSION)
+// @ControllerPermission(sample_MANAGEMENT_PERMISSION)
 export class SampleController {
   constructor() {}
 

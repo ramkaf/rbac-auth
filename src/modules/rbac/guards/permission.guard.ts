@@ -1,32 +1,21 @@
-import { Role } from "@databases/postgresql/entities/role.entity";
-import { REDIS_INDEX_ROLE } from "@databases/redis/redis.contants";
+
 import {
   Injectable,
   CanActivate,
   ExecutionContext,
-  BadRequestException,
-  Inject,
-  forwardRef,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import {
   CONTROLLER_PERMISSION_KEY,
   PERMISSIONS_KEY,
 } from "../decorators/requires-permission.decorator";
-import { RoleService } from "../providers/role.service";
 import { UsersService } from "@modules/users/providers/users.service";
-import { RedisService } from "@databases/redis/redis.service";
-import { IPermission } from "../interfaces/rbac.interface";
-import { log } from "node:console";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 
 @Injectable()
 export class PermissionGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
-    private readonly redisService: RedisService,
-    @Inject(forwardRef(() => RoleService))
-    private readonly roleService: RoleService,
     private readonly userService: UsersService,
   ) {}
 
@@ -54,63 +43,41 @@ export class PermissionGuard implements CanActivate {
     return result;
   }
 
-  async getUserPermissions(context): Promise<IPermission[]> {
-    const { user } = context.switchToHttp().getRequest();
-    let roleWithPermissions;
-    const permissionsJsonString = await this.redisService.get(REDIS_INDEX_ROLE);
-    if (permissionsJsonString)
-      roleWithPermissions = JSON.parse(permissionsJsonString);
-    else {
-      roleWithPermissions = await this.roleService.findAllWithPermissions();
-      await this.redisService.set(
-        REDIS_INDEX_ROLE,
-        JSON.stringify(roleWithPermissions),
-      );
-    }
-    const users = await this.userService.findWithRoleAndPermission();
-    const userObj = users.find((item) => item.id === user.id);
-
-    if (!userObj) throw new BadRequestException("user not found");
-    const userPermissions = roleWithPermissions.find(
-      (item: Role) => item.id === userObj.role.id,
-    ).permissions;
-    return userPermissions;
-  }
   async hasPermission(context, controllerPermission, requiredPermissions) {
     if (!requiredPermissions && !controllerPermission) return true;
-    const userPermissions = await this.getUserPermissions(context);
-    console.log({ userPermissions, requiredPermissions, controllerPermission });
+    const { user } = context.switchToHttp().getRequest();
+    const cp = await this.userHavePermission(user.id, controllerPermission);
+    const rp = await this.userHavePermission(user.id, requiredPermissions);
 
-    if (userPermissions.length === 0) return false;
-    const cp = this.checkControllerPermissionAccessability(
-      userPermissions,
-      controllerPermission,
-    );
-    const rp = this.checkRequiredPermissionAccessability(
-      userPermissions,
-      requiredPermissions,
-    );
+    if (controllerPermission && !requiredPermissions) return cp;
+    if (!controllerPermission && requiredPermissions) return rp;
+    if (controllerPermission && requiredPermissions) return cp || rp;
+  }
 
-    return cp || rp;
-  }
-  private checkRequiredPermissionAccessability(
-    userPermissions,
-    requiredPermissions,
-  ): boolean {
-    if (!requiredPermissions || userPermissions.length === 0) return true;
-    return requiredPermissions.every((permission) =>
-      userPermissions.some((userPerm) => userPerm.title === permission),
+  async userHavePermission(
+    userId: string,
+    permissionTitles?: string | string[],
+  ): Promise<boolean> {
+    const result = await this.userService.getUsersWithPermissions();
+    if (permissionTitles == null) {
+      return true;
+    }
+    const permissions = Array.isArray(permissionTitles)
+      ? permissionTitles
+      : [permissionTitles];
+
+    if (permissions.length === 0 || permissions.every((p) => !p?.trim())) {
+      return true;
+    }
+
+    const user = result.find((u) => u.id === userId);
+
+    if (!user) {
+      return false;
+    }
+
+    return permissions.every((required) =>
+      user.role.permissions.some((permission) => permission.title === required),
     );
-  }
-  private checkControllerPermissionAccessability(
-    userPermissions,
-    controllerPermission,
-  ): boolean {
-    if (!controllerPermission) return false;
-    const hasControllerPermission = userPermissions.some(
-      (permission) => permission.title === `${controllerPermission}:*`,
-    );
-    if (hasControllerPermission) return true;
-    return false;
   }
 }

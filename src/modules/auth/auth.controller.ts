@@ -1,12 +1,10 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, Req, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { SignupDto } from "./dto/signup.dto";
 import { LoginDto } from "./dto/login.dto";
 import { LocalAuthGuard } from "./guards/local-auth.guard";
 import { User } from "../../databases/postgresql/entities/user.entity";
-import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { Public } from "@modules/rbac/decorators/public.decorator";
-import { Auth } from "document";
 import { ApiTags } from "@nestjs/swagger";
 
 @ApiTags("authentication")

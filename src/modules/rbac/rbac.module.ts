@@ -18,7 +18,7 @@ import { PermissionsController } from "./controllers/permission.controller";
     forwardRef(() => UsersModule),
     TypeOrmModule.forFeature([User, Role, Permission]),
   ],
-  controllers: [RolesController , PermissionsController],
+  controllers: [RolesController, PermissionsController],
   providers: [
     RoleService,
     PermissionService,

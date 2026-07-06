@@ -33,6 +33,7 @@ export class AuthService {
       password: hashedPassword,
       role,
     });
+    await this.usersService.reIndexUsersWithPermissionsIntoRedis()
     return this.buildResponse(user);
   }
 

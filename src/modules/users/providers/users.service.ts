@@ -3,9 +3,10 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { DeepPartial, Repository } from "typeorm";
 import { User } from "../../../databases/postgresql/entities/user.entity";
 import { RedisService } from "@databases/redis/redis.service";
-import { REDIS_INDEX_USERS } from "@databases/redis/redis.contants";
+import { REDIS_INDEX_USER_WITH_THEIR_PERMISSIONS } from "@databases/redis/redis.contants";
 import { RoleService } from "@modules/rbac/providers/role.service";
 import { AssignRoleToUserDto } from "../dtos/user.dto";
+import { IUserWithRoleAndPermission } from "../interfaces/user.interface";
 
 @Injectable()
 export class UsersService {
@@ -35,7 +36,7 @@ export class UsersService {
   async assignRoleToUser(dto: AssignRoleToUserDto): Promise<User> {
     const { roleUuid, userUuid } = dto;
     const user = await this.usersRepository.findOne({
-      where: { id: dto.userUuid },
+      where: { id: userUuid },
       relations: ["role"],
     });
 
@@ -52,29 +53,23 @@ export class UsersService {
     user.role = role;
 
     const updatedUser = await this.usersRepository.save(user);
-    await this.reIndexUsersIntoRedis()
-    return updatedUser
+    await this.reIndexUsersWithPermissionsIntoRedis();
+    return updatedUser;
   }
-  async findWithRoleAndPermission() {
-    let users = await this.redisService.getObj(REDIS_INDEX_USERS)
-    if (!users){
-      users =  await this.usersRepository.find({
-      relations: {
-        role: {
-          permissions: true,
-        },
-      },
-    });
-    await this.reIndexUsersIntoRedis()
+
+  async getUsersWithPermissions(): Promise<IUserWithRoleAndPermission[]> {
+    let result = await this.redisService.getObj<IUserWithRoleAndPermission[]>(
+      REDIS_INDEX_USER_WITH_THEIR_PERMISSIONS,
+    );
+    if (!result) {
+      result = await this.reIndexUsersWithPermissionsIntoRedis();
     }
-    return users
+    return result;
   }
-
-  async findOneWithRoleAndPermission(id: string) {
-    return await this.usersRepository.findOne({
-      where: {
-        id,
-      },
+  async getUserWithPermissionsFromPostgres(): Promise<
+    IUserWithRoleAndPermission[]
+  > {
+    return await this.usersRepository.find({
       relations: {
         role: {
           permissions: true,
@@ -82,12 +77,14 @@ export class UsersService {
       },
     });
   }
-
-  async reIndexUsersIntoRedis() {
-    const usersWithRoles = await this.usersRepository
-      .createQueryBuilder("user")
-      .leftJoinAndSelect("user.role", "role")
-      .getMany();
-    await this.redisService.setObj(REDIS_INDEX_USERS, usersWithRoles);
+  async reIndexUsersWithPermissionsIntoRedis(): Promise<
+    IUserWithRoleAndPermission[]
+  > {
+    const result = await this.getUserWithPermissionsFromPostgres();
+    await this.redisService.setObj(
+      REDIS_INDEX_USER_WITH_THEIR_PERMISSIONS,
+      result,
+    );
+    return result;
   }
 }

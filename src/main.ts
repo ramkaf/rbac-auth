@@ -18,7 +18,7 @@ async function bootstrap() {
     .addTag("permissions")
     .addTag("roles")
     .addTag("user managment")
-      .addTag("sample")
+    .addTag("sample")
     .addBearerAuth(
       {
         type: "http",

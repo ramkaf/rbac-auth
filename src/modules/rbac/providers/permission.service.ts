@@ -12,19 +12,11 @@ export class PermissionService {
   async find() {
     return await this.permissionRepository.find();
   }
-  async findByUuids(ids: string[]): Promise<Permission[]> {
+  async findByIds(ids: string[]): Promise<Permission[]> {
     return this.permissionRepository.find({
       where: {
         id: In(ids),
       },
-    });
-  }
-  async findWithRoles(id: string) {
-    return this.permissionRepository.find({
-      where: {
-        id,
-      },
-      relations: ["Role"],
     });
   }
 }
